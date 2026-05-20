@@ -14,6 +14,23 @@ services:
     networks:
       - agentos
 
+  # Microsoft Playwright MCP server — drives a headless Chromium and exposes
+  # browser-automation tools over MCP. The browser_agent talks to it via the
+  # PLAYWRIGHT_MCP_URL env var, so swapping providers later is a one-line change.
+  playwright-mcp:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: playwright-mcp
+    restart: unless-stopped
+    init: true
+    entrypoint: ["node"]
+    command: >
+      /app/cli.js --headless --browser chromium --no-sandbox
+      --port 8931 --host 0.0.0.0 --allowed-hosts "*"
+    ports:
+      - "8931:8931"
+    networks:
+      - agentos
+
   agentos-api:
     build:
       context: .
@@ -31,6 +48,8 @@ services:
     volumes:
       # Hot-reload: mount source code
       - .:/app
+      # GCP Application Default Credentials (read-only) for Vertex AI / GenAI SDK
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro
     env_file:
       - path: .env
         required: false
@@ -49,8 +68,21 @@ services:
       - PRINT_ENV_ON_LOAD=True
       # API keys
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # GCP / Vertex AI
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/adc.json
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_LOCATION=${GCP_LOCATION}
+      # Force google-genai SDK into Vertex mode globally so any code path
+      # that builds a default client picks up Vertex instead of the public
+      # Gemini API (which requires an API key).
+      - GOOGLE_GENAI_USE_VERTEXAI=true
+      - GOOGLE_CLOUD_PROJECT=${GCP_PROJECT_ID}
+      - GOOGLE_CLOUD_LOCATION=${GCP_LOCATION}
+      # Browser Agent — Playwright MCP server URL (set automatically inside compose)
+      - PLAYWRIGHT_MCP_URL=${PLAYWRIGHT_MCP_URL:-http://playwright-mcp:8931/mcp}
     depends_on:
       - agentos-db
+      - playwright-mcp
     networks:
       - agentos
     extra_hosts:

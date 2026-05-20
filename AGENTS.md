@@ -158,6 +158,7 @@ Run [`docs/review-and-improve.md`](docs/review-and-improve.md). A recurring swee
 | `JWT_VERIFICATION_KEY` | prd | — | Public key from os.agno.com. Required when `RUNTIME_ENV=prd` and `authorization=True`. |
 | `AGENTOS_URL` | no | `http://127.0.0.1:8000` | Scheduler base URL. Set to your public domain in production so cron triggers reach AgentOS. |
 | `PARALLEL_API_KEY` | no | — | Authenticates the WebSearch Agent's Parallel SDK / MCP connection (raises rate ceiling). |
+| `GCP_PROJECT_ID` / `GCP_LOCATION` | no | — | Required by `app.settings.create_genai_client()` for Vertex AI. Auth via Application Default Credentials (`gcloud auth application-default login` locally, workload identity on GCP). |
 | `SLACK_BOT_TOKEN` | no | — | Bot token. Set with signing secret to enable Slack interface. |
 | `SLACK_SIGNING_SECRET` | no | — | Signing secret. Both must be set for the interface to load. |
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` / `DB_DATABASE` | no | matches compose | Postgres connection. |

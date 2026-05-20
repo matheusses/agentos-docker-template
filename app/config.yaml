@@ -8,3 +8,7 @@ chat:
       - "What agents are available in this project?"
       - "How does the database connection work?"
       - "Walk me through the main entry point"
+    browser-agent:
+      - "Open https://example.com and summarize the page"
+      - "Take a screenshot of https://news.ycombinator.com"
+      - "Extract the top 5 headlines from https://news.ycombinator.com"
