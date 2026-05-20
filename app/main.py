@@ -24,15 +24,17 @@ postgres_db = get_postgres_db()
 _CODE_AGENTS = [web_search, code_search, browser_agent]
 _CODE_AGENT_IDS = {a.id for a in _CODE_AGENTS}
 
-# Studio-saved agent blueprints (rows in `agno_components`). Pull them at
-# startup so they show up in `/agents`, the Registry, and the eval picker.
+# Studio-saved agent blueprints (rows in `agno_components`). Loaded once at
+# startup and merged with the code-defined set so the eval router's
+# `get_agent_by_id` can resolve them — that lookup only scans `os.agents`,
+# DB-stored blueprints alone are not enough.
 try:
-    _db_agents = load_db_agents(db=postgres_db, exclude_component_ids=_CODE_AGENT_IDS)
+    _DB_AGENTS = load_db_agents(db=postgres_db, exclude_component_ids=_CODE_AGENT_IDS)
 except Exception as exc:  # pragma: no cover — degrade gracefully if blueprints are malformed
     log_warning(f"Failed to load Studio-saved agents from db: {exc}")
-    _db_agents = []
+    _DB_AGENTS = []
 
-all_agents = [*_CODE_AGENTS, *_db_agents]
+ALL_AGENTS = [*_CODE_AGENTS, *_DB_AGENTS]
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -86,7 +88,11 @@ registry = Registry(
     models=discover_gemini_models(),
     tools=[web_tools, playwright_mcp],
     dbs=[postgres_db],
-    agents=all_agents,
+    # `agents` left empty on purpose. `AgentOS(agents=...)` auto-populates
+    # `registry.agents` at init, then `/components` excludes every agent ID it
+    # finds in the registry. We override that list back to empty after init
+    # (see below) so DB-stored blueprints still show up on Studio's Agents
+    # page while remaining runnable for eval.
 )
 
 # ---------------------------------------------------------------------------
@@ -100,11 +106,17 @@ agent_os = AgentOS(
     authorization=runtime_env == "prd",
     lifespan=lifespan,
     db=postgres_db,
-    agents=all_agents,
+    agents=ALL_AGENTS,
     interfaces=interfaces,
     registry=registry,
     config=str(Path(__file__).parent / "config.yaml"),
 )
+
+# Wipe the auto-populated `registry.agents` so `/components` does not exclude
+# our agents (Studio's Agents page reads from there). Eval/run routing keeps
+# working because it scans `os.agents`, which is unchanged.
+registry.agents = []
+
 app = agent_os.get_app()
 
 
@@ -155,6 +167,58 @@ app.add_api_route(
     operation_id="get_models",
     summary="Get Available Models",
 )
+
+
+# ---------------------------------------------------------------------------
+# Wrap the upstream `/agents` handler so Studio's "Run new evaluation" picker
+# can see DB-loaded blueprints. The picker filters by `is_component=False`,
+# which agno only sets for agents registered in code — DB blueprints are
+# tagged `True` and disappear from the dropdown. We rewrite the flag on the
+# way out so every agent shows up in the eval modal.
+#
+# Remove this once Studio stops filtering by `is_component`.
+# ---------------------------------------------------------------------------
+from starlette.requests import Request as _Request  # noqa: E402
+from starlette.responses import JSONResponse as _JSONResponse  # noqa: E402
+
+_AGENTS_GET_ENDPOINT = next(
+    (
+        getattr(r, "endpoint")
+        for r in app.router.routes
+        if getattr(r, "path", None) == "/agents" and "GET" in getattr(r, "methods", set())
+    ),
+    None,
+)
+
+
+async def _get_agents_flattened(request: _Request) -> _JSONResponse:
+    items = await _AGENTS_GET_ENDPOINT(request)  # type: ignore[misc]
+    payload: list[dict] = []
+    seen: set[str] = set()
+    for item in items:
+        body = item.model_dump(exclude_none=True) if hasattr(item, "model_dump") else dict(item)
+        agent_id = body.get("id")
+        if agent_id is None or agent_id in seen:
+            continue
+        seen.add(agent_id)
+        body["is_component"] = False
+        payload.append(body)
+    return _JSONResponse(payload)
+
+
+if _AGENTS_GET_ENDPOINT is not None:
+    app.router.routes = [
+        r for r in app.router.routes
+        if not (getattr(r, "path", None) == "/agents" and "GET" in getattr(r, "methods", set()))
+    ]
+    app.add_api_route(
+        "/agents",
+        _get_agents_flattened,
+        methods=["GET"],
+        tags=["Agents"],
+        operation_id="get_agents",
+        summary="Get Available Agents",
+    )
 
 
 if __name__ == "__main__":
