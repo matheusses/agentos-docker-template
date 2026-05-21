@@ -27,6 +27,7 @@ gitdb==4.0.12
 gitpython==3.1.50
 google-auth==2.53.0
 google-genai==2.4.0
+greenlet==3.5.1
 h11==0.16.0
 h2==4.3.0
 hpack==4.1.0
@@ -57,6 +58,7 @@ opentelemetry-semantic-conventions==0.63b0
 packaging==26.2
 parallel-web==0.6.0
 pgvector==0.4.2
+playwright==1.60.0
 propcache==0.5.2
 psycopg==3.3.4
 psycopg-binary==3.3.4
@@ -67,6 +69,7 @@ pydantic==2.13.4
 pydantic-core==2.46.4
 pydantic-extra-types==2.11.1
 pydantic-settings==2.14.1
+pyee==13.0.1
 pygments==2.20.0
 pyjwt==2.12.1
 python-dateutil==2.9.0.post0

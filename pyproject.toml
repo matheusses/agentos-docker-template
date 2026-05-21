@@ -15,6 +15,7 @@ dependencies = [
   "mcp",
   "openai",
   "parallel-web",
+  "playwright",
   "pgvector",
   "psycopg[binary]",
   "sqlalchemy",
@@ -45,7 +46,7 @@ plugins = ["pydantic.mypy"]
 exclude = [".venv*"]
 
 [[tool.mypy.overrides]]
-module = ["pgvector.*", "agno.*", "httpx.*", "mcp.*", "sqlalchemy.*", "fastapi.*", "google.*"]
+module = ["pgvector.*", "agno.*", "httpx.*", "mcp.*", "sqlalchemy.*", "fastapi.*", "google.*", "playwright.*"]
 ignore_missing_imports = true
 
 [tool.uv.pip]

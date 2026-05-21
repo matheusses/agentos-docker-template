@@ -15,6 +15,7 @@ from agno.utils.log import log_info, log_warning
 from agents.browser_agent import browser_agent, playwright_mcp
 from agents.code_search import code_search
 from agents.web_search import web_search, web_tools
+from app.fallback_agent_browser import router as fallback_agent_browser_router
 from app.settings import discover_gemini_models
 from db import get_postgres_db
 
@@ -118,6 +119,15 @@ agent_os = AgentOS(
 registry.agents = []
 
 app = agent_os.get_app()
+app.include_router(fallback_agent_browser_router)
+
+# AgentOS also exposes a generic `/workflows/{workflow_id}/runs` route. Put the
+# concrete fallback route before that parameterized route so UPP Integrations
+# always reaches the CDP-aware implementation below.
+app.router.routes = sorted(
+    app.router.routes,
+    key=lambda route: 0 if getattr(route, "path", None) == "/workflows/fallback-agent-browser/runs" else 1,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -143,18 +153,19 @@ async def _get_models_fixed() -> list[_Model]:
         if mid and provider:
             unique.setdefault((mid, provider), _Model(id=mid, provider=provider))
 
-    for item in (agent_os.agents or []):
+    for item in agent_os.agents or []:
         _add(getattr(item, "model", None))
-    for item in (agent_os.teams or []):
+    for item in agent_os.teams or []:
         _add(getattr(item, "model", None))
-    for item in (getattr(registry, "models", None) or []):
+    for item in getattr(registry, "models", None) or []:
         _add(item)
 
     return sorted(unique.values(), key=lambda m: m.id)
 
 
 app.router.routes = [
-    r for r in app.router.routes
+    r
+    for r in app.router.routes
     if not (getattr(r, "path", None) == "/models" and "GET" in getattr(r, "methods", set()))
 ]
 app.add_api_route(
@@ -208,7 +219,8 @@ async def _get_agents_flattened(request: _Request) -> _JSONResponse:
 
 if _AGENTS_GET_ENDPOINT is not None:
     app.router.routes = [
-        r for r in app.router.routes
+        r
+        for r in app.router.routes
         if not (getattr(r, "path", None) == "/agents" and "GET" in getattr(r, "methods", set()))
     ]
     app.add_api_route(
